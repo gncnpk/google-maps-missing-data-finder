@@ -1,4 +1,3 @@
-# google-maps-missing-data-finder
+# google-maps-place-validator
 
-
-Scan Google Maps using the Nearby Search API for places missing data such as website, phone number, or hours.
+Scan Google Maps using the Nearby Search API and validate places for missing/invalid data such as website, phone number, hours or places with emojis in names.
