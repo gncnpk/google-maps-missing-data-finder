@@ -2,7 +2,7 @@
 // @name         Google Maps Missing Data Finder
 // @namespace    https://github.com/gncnpk/google-maps-missing-data-finder
 // @author       Gavin Canon-Phratsachack (https://github.com/gncnpk)
-// @version      0.0.4
+// @version      0.0.5
 // @description  Scan Google Maps using the Nearby Search API for places missing website, phone number, or hours.
 // @match        https://*.google.com/maps/*@*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
@@ -11,7 +11,8 @@
 // @grant        none
 // ==/UserScript==
 
-;(function() {
+;
+(function() {
     'use strict';
 
     // Avoid double-inject
@@ -329,6 +330,46 @@
 
     function findMissing(arr) {
         return arr.reduce((acc, p) => {
+            // Filter out places where name is just street number + route or just route
+            if (p.addressComponents && Array.isArray(p.addressComponents)) {
+                const streetNumberComponent = p.addressComponents.find(
+                    c => c.types && c.types.includes('street_number')
+                );
+
+                const routeComponent = p.addressComponents.find(
+                    c => c.types && c.types.includes('route')
+                );
+
+                const placeName = getPlaceName(p);
+
+                if (routeComponent) {
+                    const routeShort = routeComponent.shortText;
+                    const routeLong = routeComponent.longText;
+
+                    // Skip if the place name is just the street name (short or long)
+                    if (placeName === routeShort || placeName === routeLong) {
+                        return acc;
+                    }
+
+                    // Skip if the place name is street number + route (any combination)
+                    if (streetNumberComponent) {
+                        const streetNumberShort = streetNumberComponent.shortText;
+                        const streetNumberLong = streetNumberComponent.longText;
+
+                        const combinations = [
+                            `${streetNumberShort} ${routeShort}`,
+                            `${streetNumberShort} ${routeLong}`,
+                            `${streetNumberLong} ${routeShort}`,
+                            `${streetNumberLong} ${routeLong}`
+                        ];
+
+                        if (combinations.includes(placeName)) {
+                            return acc;
+                        }
+                    }
+                }
+            }
+
             const miss = [];
             if (!p.websiteUri ||
                 !p.websiteUri.trim()) miss.push(
@@ -416,7 +457,9 @@
                             'places.currentOpeningHours',
                             'places.googleMapsUri',
                             'places.primaryType',
-                            'places.primaryTypeDisplayName'].join(",")
+                            'places.primaryTypeDisplayName',
+                            'places.addressComponents'
+                        ].join(",")
                     },
                     body: JSON.stringify(body)
                 }
