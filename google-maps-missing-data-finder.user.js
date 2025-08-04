@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Google Maps Missing Data Finder
+// @name         Google Maps Place Validator
 // @namespace    https://github.com/gncnpk/google-maps-missing-data-finder
 // @author       Gavin Canon-Phratsachack (https://github.com/gncnpk)
-// @version      0.0.6
-// @description  Scan Google Maps using the Nearby Search API for places missing data such as website, phone number, or hours.
+// @version      0.0.7
+// @description  Scan Google Maps using the Nearby Search API and validate places for missing/invalid data such as website, phone number, hours or places with emojis in names.
 // @match        https://*.google.com/maps/*@*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @run-at       document-start
@@ -24,6 +24,18 @@
     const STORAGE_POS = 'md_panel_pos';
     const STORAGE_SIZE = 'md_panel_size';
     const STORAGE_CACHE = 'md_results_cache';
+
+    /**
+     * Detects if text contains emojis
+     */
+    function hasEmoji(text) {
+        if (!text || typeof text !== 'string') return false;
+
+        // Comprehensive emoji regex pattern
+        const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA70}-\u{1FAFF}]|[\u{FE00}-\u{FE0F}]|[\u{1F004}]|[\u{1F0CF}]|[\u{1F18E}]|[\u{3030}]|[\u{2B50}]|[\u{2B55}]|[\u{2934}-\u{2935}]|[\u{2B05}-\u{2B07}]|[\u{2B1B}-\u{2B1C}]|[\u{3297}]|[\u{3299}]|[\u{303D}]|[\u{00A9}]|[\u{00AE}]|[\u{2122}]|[\u{23F3}]|[\u{24C2}]|[\u{23E9}-\u{23EF}]|[\u{25B6}]|[\u{23F8}-\u{23FA}]/gu;
+
+        return emojiRegex.test(text);
+    }
 
     /**
      * Extracts the zoom level from a Google Maps URL of the form
@@ -100,14 +112,14 @@
         display:flex;justify-content:space-between;
         align-items:center;border-radius:4px 4px 0 0;
         cursor:move;">
-      <span>Places Missing Data</span>
+      <span>Place Validator</span>
       <button id="md-close-btn" style="
           background:transparent;border:none;
           color:#fff;font-size:16px;line-height:1;
           cursor:pointer;">×</button>
     </div>
-    <div id="md-content" style="padding:8px;">
-      <div id="md-key-section" style="margin-bottom:6px;">
+    <div id="md-content" style="padding:8px;display:flex;flex-direction:column;height:calc(100% - 40px);">
+      <div id="md-key-section" style="margin-bottom:6px;flex-shrink:0;">
         <input id="md-api-key" type="text"
           placeholder="Enter API Key"
           style="width:100%;box-sizing:border-box;
@@ -119,14 +131,14 @@
           border-radius:2px;cursor:pointer;
         ">Set API Key</button>
       </div>
-      <div style="margin-bottom:6px;">
+      <div style="margin-bottom:6px;flex-shrink:0;">
         <button id="md-scan-btn" disabled style="
           width:100%;padding:6px;
           background:#28a;color:#fff;border:none;
           border-radius:2px;cursor:pointer;
         ">Scan Nearby</button>
       </div>
-      <div style="margin-bottom:6px;display:flex;gap:4px;">
+      <div style="margin-bottom:6px;display:flex;gap:4px;flex-shrink:0;">
         <button id="md-cached-btn" style="
           flex:1;padding:4px;
           background:#4a4;color:#fff;border:none;
@@ -138,14 +150,14 @@
           border-radius:2px;cursor:pointer;font-size:12px;
         ">Clear Cache</button>
       </div>
-      <div style="margin-bottom:6px;">
+      <div style="margin-bottom:6px;flex-shrink:0;">
         <button id="md-manage-blacklist-btn" style="
           width:100%;padding:4px;
           background:#666;color:#fff;border:none;
           border-radius:2px;cursor:pointer;font-size:12px;
         ">Manage Type Blacklist</button>
       </div>
-      <div id="md-blacklist-section" style="display:none;margin-bottom:6px;background:#f5f5f5;padding:6px;border-radius:2px;">
+      <div id="md-blacklist-section" style="display:none;margin-bottom:6px;background:#f5f5f5;padding:6px;border-radius:2px;flex-shrink:0;">
         <div style="font-weight:bold;margin-bottom:4px;">Blacklisted Types:</div>
         <div id="md-blacklist-display" style="font-size:12px;margin-bottom:6px;"></div>
         <input id="md-new-blacklist-type" type="text"
@@ -159,12 +171,13 @@
           border-radius:2px;cursor:pointer;font-size:12px;
         ">Add</button>
       </div>
-      <div id="md-cache-section" style="display:none;margin-bottom:6px;background:#f0f8ff;padding:6px;border-radius:2px;">
+      <div id="md-cache-section" style="display:none;margin-bottom:6px;background:#f0f8ff;padding:6px;border-radius:2px;flex-shrink:0;">
         <div style="font-weight:bold;margin-bottom:4px;">Cached Results:</div>
         <div id="md-cache-list" style="font-size:11px;max-height:100px;overflow-y:auto;"></div>
       </div>
       <div id="md-output" style="
-          max-height:250px;
+          flex:1;
+          min-height:150px;
           overflow-x:auto;
           overflow-y:auto;
           background:#f9f9f9;padding:6px;
@@ -212,6 +225,32 @@
         }
     });
     ro.observe(panel);
+
+function adjustPanelSize() {
+    const maxHeight = window.innerHeight - 100; // Leave some margin
+    const maxWidth = window.innerWidth - 100;
+
+    const currentHeight = parseInt(panel.style.height) || 400;
+    const currentWidth = parseInt(panel.style.width) || 360;
+
+    if (currentHeight > maxHeight) {
+        panel.style.height = maxHeight + 'px';
+    }
+    if (currentWidth > maxWidth) {
+        panel.style.width = maxWidth + 'px';
+    }
+
+    // Ensure panel stays within viewport
+    const rect = panel.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+        panel.style.left = (window.innerWidth - rect.width - 10) + 'px';
+    }
+    if (rect.bottom > window.innerHeight) {
+        panel.style.top = (window.innerHeight - rect.height - 10) + 'px';
+    }
+}
+
+window.addEventListener('resize', adjustPanelSize);
 
     // Drag support via Pointer Events
     const header = document.getElementById('md-header');
@@ -302,8 +341,9 @@
         localStorage.setItem(STORAGE_WHITE, JSON.stringify(whitelist));
     }
 
-    // Type Blacklist
-    let typeBlacklist = ['bus_stop', 'public_restroom', 'doctor', 'consultant', 'transit_station', 'playground']; // Default blacklist
+    // Disabled to allow PoI with emojis to be discovered
+    // let typeBlacklist = ['bus_stop', 'public_restroom', 'doctor', 'consultant', 'transit_station', 'playground'];
+    let typeBlacklist = [];
     try {
         const b = JSON.parse(localStorage.getItem(STORAGE_BLACKLIST) || '[]');
         if (Array.isArray(b) && b.length > 0) typeBlacklist = b;
@@ -422,7 +462,8 @@
     const FIELD_LABELS = {
         websiteUri: 'Website',
         nationalPhoneNumber: 'Phone number',
-        currentOpeningHours: 'Hours'
+        currentOpeningHours: 'Hours',
+        hasEmoji: 'Has emoji in name'
     };
 
     function getPlaceName(p) {
@@ -476,6 +517,9 @@
             }
 
             const miss = [];
+            const placeName = getPlaceName(p);
+
+            // Check for missing data
             if (!p.websiteUri ||
                 !p.websiteUri.trim()) miss.push(
                 FIELD_LABELS.websiteUri
@@ -488,12 +532,19 @@
                 typeof p.currentOpeningHours !== 'object') miss.push(
                 FIELD_LABELS.currentOpeningHours
             );
+
+            // Check for emojis in name
+            if (hasEmoji(placeName)) {
+                miss.push(FIELD_LABELS.hasEmoji);
+            }
+
+            // Add to results if has missing data OR has emojis
             if (miss.length) {
                 // capture primaryType if present
                 const typeName = p.primaryTypeDisplayName?.text || ''
                 acc.push({
                     id: p.id,
-                    name: getPlaceName(p),
+                    name: placeName,
                     uri: p.googleMapsUri,
                     missing: miss,
                     primaryTypeDisplayName: typeName,
@@ -507,8 +558,8 @@
     function displayResults(missing, isFromCache = false, cacheDate = null) {
         if (!missing.length) {
             const message = isFromCache ?
-                `✅ All places had website, phone number & hours (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
-                '✅ All places have website, phone number & hours.';
+                `✅ All places had complete data and no emojis (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
+                '✅ All places have complete data and no emojis in names.';
             output.textContent = message;
             return;
         }
@@ -518,8 +569,8 @@
 
         if (!missing.length) {
             const message = isFromCache ?
-                `✅ All remaining places had website, phone number & hours (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
-                '✅ All places have website, phone number & hours.';
+                `✅ All remaining places had complete data and no emojis (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
+                '✅ All places have complete data and no emojis in names.';
             output.textContent = message;
             return;
         }
@@ -543,13 +594,21 @@
         missing.forEach(p => {
             const li = document.createElement('li');
             li.style.whiteSpace = 'nowrap';
-            li.style.marginBottom = '6px';
+li.style.marginBottom = '9px';
+li.style.position = 'relative';
+li.style.paddingRight = '120px'; // Add space to prevent text from going under buttons
 
             const a = document.createElement('a');
             a.href = p.uri;
             a.textContent = p.name;
             a.target = '_blank';
             a.style.fontWeight = 'bold';
+
+            // Add emoji indicator if name has emojis
+            if (hasEmoji(p.name)) {
+                a.style.color = '#ff6600'; // Orange color for emoji names
+            }
+
             li.appendChild(a);
 
             // show type next to the link
@@ -563,56 +622,69 @@
             // then show missing fields
             li.appendChild(
                 document.createTextNode(
-                    ' – missing: ' + p.missing.join(', ')
+                    ' – flagged for: ' + p.missing.join(', ')
                 )
             );
 
-            const btn = document.createElement('button');
-            btn.textContent = 'Whitelist';
-            btn.style.background = '#28a';
-            btn.style.color = '#fff';
-            btn.style.border = 'none';
-            btn.style.borderRadius = '2px';
-            btn.style.padding = '2px 8px';
-            btn.style.cursor = 'pointer';
-            btn.style.marginLeft = '8px';
-            btn.addEventListener('click', () => {
-                if (!whitelist.includes(p.id)) {
-                    whitelist.push(p.id);
-                    persistWhitelist();
-                }
-                li.remove();
-                if (!ul.childElementCount) {
-                    const message = isFromCache ?
-                        `✅ All remaining places had website, phone number & hours (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
-                        '✅ All places have website, phone number & hours.';
-                    output.textContent = message;
-                }
-            });
-            li.appendChild(btn);
+// Create button container for proper alignment
+const buttonContainer = document.createElement('div');
+buttonContainer.style.cssText = 'position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; gap: 4px; align-items: center; background: rgba(255,255,255,0.9); border-radius: 2px; padding: 2px;';
 
-            // Add blacklist button for the type (only for fresh results)
-            if (p.primaryType && !isFromCache) {
-                const blacklistBtn = document.createElement('button');
-                blacklistBtn.textContent = 'Blacklist Type';
-                blacklistBtn.style.background = '#d44';
-                blacklistBtn.style.color = '#fff';
-                blacklistBtn.style.border = 'none';
-                blacklistBtn.style.borderRadius = '2px';
-                blacklistBtn.style.padding = '2px 8px';
-                blacklistBtn.style.cursor = 'pointer';
-                blacklistBtn.style.marginLeft = '4px';
-                blacklistBtn.style.fontSize = '11px';
-                blacklistBtn.addEventListener('click', () => {
-                    const type = p.primaryType.toLowerCase();
-                    if (!typeBlacklist.includes(type)) {
-                        typeBlacklist.push(type);
-                        persistTypeBlacklist();
-                        alert(`Added "${type}" to blacklist. Please scan again to see updated results.`);
-                    }
-                });
-                li.appendChild(blacklistBtn);
-            }
+const btn = document.createElement('button');
+btn.textContent = 'Whitelist';
+btn.style.cssText = `
+    background: #28a;
+    color: #fff;
+    border: none;
+    border-radius: 2px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 11px;
+    height: 22px;
+    line-height: 1;
+`;
+btn.addEventListener('click', () => {
+    if (!whitelist.includes(p.id)) {
+        whitelist.push(p.id);
+        persistWhitelist();
+    }
+    li.remove();
+    if (!ul.childElementCount) {
+        const message = isFromCache ?
+            `✅ All remaining places had complete data and no emojis (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
+            '✅ All places have complete data and no emojis in names.';
+        output.textContent = message;
+    }
+});
+buttonContainer.appendChild(btn);
+
+// Add blacklist button for the type (only for fresh results)
+if (p.primaryType && !isFromCache) {
+    const blacklistBtn = document.createElement('button');
+    blacklistBtn.textContent = 'Blacklist Type';
+    blacklistBtn.style.cssText = `
+        background: #d44;
+        color: #fff;
+        border: none;
+        border-radius: 2px;
+        padding: 2px 8px;
+        cursor: pointer;
+        font-size: 11px;
+        height: 22px;
+        line-height: 1;
+    `;
+    blacklistBtn.addEventListener('click', () => {
+        const type = p.primaryType.toLowerCase();
+        if (!typeBlacklist.includes(type)) {
+            typeBlacklist.push(type);
+            persistTypeBlacklist();
+            alert(`Added "${type}" to blacklist. Please scan again to see updated results.`);
+        }
+    });
+    buttonContainer.appendChild(blacklistBtn);
+}
+
+li.appendChild(buttonContainer);
 
             ul.appendChild(li);
         });
