@@ -244,7 +244,7 @@
     }
 
     // Type Blacklist
-    let typeBlacklist = ['bus_stop', 'public_restroom']; // Default blacklist
+    let typeBlacklist = ['bus_stop', 'public_restroom', 'doctor', 'consultant']; // Default blacklist
     try {
         const b = JSON.parse(localStorage.getItem(STORAGE_BLACKLIST) || '[]');
         if (Array.isArray(b) && b.length > 0) typeBlacklist = b;
