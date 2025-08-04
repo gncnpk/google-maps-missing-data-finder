@@ -341,7 +341,7 @@
         localStorage.setItem(STORAGE_WHITE, JSON.stringify(whitelist));
     }
 
-    let typeBlacklist = ['bus_stop', 'public_restroom', 'doctor', 'consultant', 'transit_station', 'playground'];
+    let typeBlacklist = ['bus_stop', 'public_bathroom', 'doctor', 'consultant', 'transit_station', 'playground', 'swimming_pool'];
     try {
         const b = JSON.parse(localStorage.getItem(STORAGE_BLACKLIST) || '[]');
         if (Array.isArray(b) && b.length > 0) typeBlacklist = b;
