@@ -3,7 +3,7 @@
 // @namespace    https://github.com/gncnpk/google-maps-missing-data-finder
 // @author       Gavin Canon-Phratsachack (https://github.com/gncnpk)
 // @version      0.0.5
-// @description  Scan Google Maps using the Nearby Search API for places missing website, phone number, or hours.
+// @description  Scan Google Maps using the Nearby Search API for places missing data such as website, phone number, or hours.
 // @match        https://*.google.com/maps/*@*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @run-at       document-start
