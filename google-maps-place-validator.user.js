@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Google Maps Place Validator
-// @namespace    https://github.com/gncnpk/google-maps-missing-data-finder
+// @namespace    https://github.com/gncnpk/google-maps-place-validator
 // @author       Gavin Canon-Phratsachack (https://github.com/gncnpk)
 // @version      0.0.7
 // @description  Scan Google Maps using the Nearby Search API and validate places for missing/invalid data such as website, phone number, hours or places with emojis in names.
