@@ -2,7 +2,7 @@
 // @name         Google Maps Missing Data Finder
 // @namespace    https://github.com/gncnpk/google-maps-missing-data-finder
 // @author       Gavin Canon-Phratsachack (https://github.com/gncnpk)
-// @version      0.0.3
+// @version      0.0.4
 // @description  Scan Google Maps using the Nearby Search API for places missing website, phone number, or hours.
 // @match        https://*.google.com/maps/*@*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
@@ -11,8 +11,7 @@
 // @grant        none
 // ==/UserScript==
 
-;
-(function() {
+;(function() {
     'use strict';
 
     // Avoid double-inject
@@ -20,6 +19,7 @@
 
     const STORAGE_KEY = 'md_api_key';
     const STORAGE_WHITE = 'md_whitelist';
+    const STORAGE_BLACKLIST = 'md_type_blacklist';
     const STORAGE_POS = 'md_panel_pos';
     const STORAGE_SIZE = 'md_panel_size';
 
@@ -101,6 +101,27 @@
           background:#28a;color:#fff;border:none;
           border-radius:2px;cursor:pointer;
         ">Scan Nearby</button>
+      </div>
+      <div style="margin-bottom:6px;">
+        <button id="md-manage-blacklist-btn" style="
+          width:100%;padding:4px;
+          background:#666;color:#fff;border:none;
+          border-radius:2px;cursor:pointer;font-size:12px;
+        ">Manage Type Blacklist</button>
+      </div>
+      <div id="md-blacklist-section" style="display:none;margin-bottom:6px;background:#f5f5f5;padding:6px;border-radius:2px;">
+        <div style="font-weight:bold;margin-bottom:4px;">Blacklisted Types:</div>
+        <div id="md-blacklist-display" style="font-size:12px;margin-bottom:6px;"></div>
+        <input id="md-new-blacklist-type" type="text"
+          placeholder="Add type (e.g., bus_stop)"
+          style="width:70%;box-sizing:border-box;
+                 padding:3px;border:1px solid #ccc;
+                 border-radius:2px;font-size:12px;"/>
+        <button id="md-add-blacklist-btn" style="
+          width:25%;margin-left:2%;padding:3px;
+          background:#d44;color:#fff;border:none;
+          border-radius:2px;cursor:pointer;font-size:12px;
+        ">Add</button>
       </div>
       <div id="md-output" style="
           max-height:250px;
@@ -222,6 +243,66 @@
         localStorage.setItem(STORAGE_WHITE, JSON.stringify(whitelist));
     }
 
+    // Type Blacklist
+    let typeBlacklist = ['bus_stop', 'public_restroom']; // Default blacklist
+    try {
+        const b = JSON.parse(localStorage.getItem(STORAGE_BLACKLIST) || '[]');
+        if (Array.isArray(b) && b.length > 0) typeBlacklist = b;
+    } catch {}
+
+    function persistTypeBlacklist() {
+        localStorage.setItem(STORAGE_BLACKLIST, JSON.stringify(typeBlacklist));
+    }
+
+    // Blacklist management UI
+    const manageBlacklistBtn = document.getElementById('md-manage-blacklist-btn');
+    const blacklistSection = document.getElementById('md-blacklist-section');
+    const blacklistDisplay = document.getElementById('md-blacklist-display');
+    const newBlacklistInput = document.getElementById('md-new-blacklist-type');
+    const addBlacklistBtn = document.getElementById('md-add-blacklist-btn');
+
+    function updateBlacklistDisplay() {
+        if (typeBlacklist.length === 0) {
+            blacklistDisplay.textContent = 'None';
+        } else {
+            blacklistDisplay.innerHTML = typeBlacklist.map(type => {
+                return `<span style="background:#ddd;padding:2px 6px;margin:2px;border-radius:2px;display:inline-block;">
+                    ${type}
+                    <button onclick="removeFromBlacklist('${type}')" style="background:none;border:none;color:#666;cursor:pointer;margin-left:4px;">×</button>
+                </span>`;
+            }).join('');
+        }
+    }
+
+    // Make removeFromBlacklist globally accessible for inline onclick
+    window.removeFromBlacklist = function(type) {
+        typeBlacklist = typeBlacklist.filter(t => t !== type);
+        persistTypeBlacklist();
+        updateBlacklistDisplay();
+    };
+
+    manageBlacklistBtn.addEventListener('click', () => {
+        const isVisible = blacklistSection.style.display !== 'none';
+        blacklistSection.style.display = isVisible ? 'none' : 'block';
+        if (!isVisible) updateBlacklistDisplay();
+    });
+
+    addBlacklistBtn.addEventListener('click', () => {
+        const newType = newBlacklistInput.value.trim().toLowerCase();
+        if (newType && !typeBlacklist.includes(newType)) {
+            typeBlacklist.push(newType);
+            persistTypeBlacklist();
+            updateBlacklistDisplay();
+            newBlacklistInput.value = '';
+        }
+    });
+
+    newBlacklistInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            addBlacklistBtn.click();
+        }
+    });
+
     // Set API key
     setBtn.addEventListener('click', () => {
         const k = keyInput.value.trim();
@@ -269,7 +350,8 @@
                     name: getPlaceName(p),
                     uri: p.googleMapsUri,
                     missing: miss,
-                    primaryTypeDisplayName: typeName
+                    primaryTypeDisplayName: typeName,
+                    primaryType: p.primaryType
                 });
             }
             return acc;
@@ -313,6 +395,11 @@
             rankPreference: "DISTANCE"
         };
 
+        // Add excludedTypes to the request body if there are any blacklisted types
+        if (typeBlacklist.length > 0) {
+            body.excludedTypes = typeBlacklist;
+        }
+
         // Fetch
         let data;
         try {
@@ -322,13 +409,14 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Goog-FieldMask': 'places.id,' +
-                            'places.displayName,' +
-                            'places.websiteUri,' +
-                            'places.nationalPhoneNumber,' +
-                            'places.currentOpeningHours,' +
-                            'places.googleMapsUri,' +
-                            'places.primaryTypeDisplayName'
+                        'X-Goog-FieldMask': ['places.id',
+                            'places.displayName',
+                            'places.websiteUri',
+                            'places.nationalPhoneNumber',
+                            'places.currentOpeningHours',
+                            'places.googleMapsUri',
+                            'places.primaryType',
+                            'places.primaryTypeDisplayName'].join(",")
                     },
                     body: JSON.stringify(body)
                 }
@@ -406,6 +494,29 @@
                 }
             });
             li.appendChild(btn);
+
+            // Add blacklist button for the type
+            if (p.primaryType) {
+                const blacklistBtn = document.createElement('button');
+                blacklistBtn.textContent = 'Blacklist Type';
+                blacklistBtn.style.background = '#d44';
+                blacklistBtn.style.color = '#fff';
+                blacklistBtn.style.border = 'none';
+                blacklistBtn.style.borderRadius = '2px';
+                blacklistBtn.style.padding = '2px 8px';
+                blacklistBtn.style.cursor = 'pointer';
+                blacklistBtn.style.marginLeft = '4px';
+                blacklistBtn.style.fontSize = '11px';
+                blacklistBtn.addEventListener('click', () => {
+                    const type = p.primaryType.toLowerCase();
+                    if (!typeBlacklist.includes(type)) {
+                        typeBlacklist.push(type);
+                        persistTypeBlacklist();
+                        alert(`Added "${type}" to blacklist. Please scan again to see updated results.`);
+                    }
+                });
+                li.appendChild(blacklistBtn);
+            }
 
             ul.appendChild(li);
         });
