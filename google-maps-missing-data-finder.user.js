@@ -2,7 +2,7 @@
 // @name         Google Maps Missing Data Finder
 // @namespace    https://github.com/gncnpk/google-maps-missing-data-finder
 // @author       Gavin Canon-Phratsachack (https://github.com/gncnpk)
-// @version      0.0.5
+// @version      0.0.6
 // @description  Scan Google Maps using the Nearby Search API for places missing data such as website, phone number, or hours.
 // @match        https://*.google.com/maps/*@*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
@@ -23,6 +23,7 @@
     const STORAGE_BLACKLIST = 'md_type_blacklist';
     const STORAGE_POS = 'md_panel_pos';
     const STORAGE_SIZE = 'md_panel_size';
+    const STORAGE_CACHE = 'md_results_cache';
 
     /**
      * Extracts the zoom level from a Google Maps URL of the form
@@ -48,6 +49,28 @@
         if (zoom === null) return baseRadius;
         const r = baseRadius * Math.pow(2, baseZoom - zoom);
         return Math.min(baseRadius, Math.max(100, Math.round(r)));
+    }
+
+    // Cache management
+    let resultsCache = [];
+    try {
+        const cached = JSON.parse(localStorage.getItem(STORAGE_CACHE) || '[]');
+        if (Array.isArray(cached)) resultsCache = cached;
+    } catch {}
+
+    function persistCache() {
+        // Keep only last 10 cache entries to avoid storage bloat
+        if (resultsCache.length > 10) {
+            resultsCache = resultsCache.slice(-10);
+        }
+        localStorage.setItem(STORAGE_CACHE, JSON.stringify(resultsCache));
+    }
+
+    function generateCacheKey(lat, lng, radius) {
+        // Round coordinates to avoid too many similar cache entries
+        const roundLat = Math.round(lat * 1000) / 1000;
+        const roundLng = Math.round(lng * 1000) / 1000;
+        return `${roundLat},${roundLng},${radius}`;
     }
 
     // Build panel
@@ -103,6 +126,18 @@
           border-radius:2px;cursor:pointer;
         ">Scan Nearby</button>
       </div>
+      <div style="margin-bottom:6px;display:flex;gap:4px;">
+        <button id="md-cached-btn" style="
+          flex:1;padding:4px;
+          background:#4a4;color:#fff;border:none;
+          border-radius:2px;cursor:pointer;font-size:12px;
+        ">View Cached Results</button>
+        <button id="md-clear-cache-btn" style="
+          padding:4px 8px;
+          background:#d44;color:#fff;border:none;
+          border-radius:2px;cursor:pointer;font-size:12px;
+        ">Clear Cache</button>
+      </div>
       <div style="margin-bottom:6px;">
         <button id="md-manage-blacklist-btn" style="
           width:100%;padding:4px;
@@ -123,6 +158,10 @@
           background:#d44;color:#fff;border:none;
           border-radius:2px;cursor:pointer;font-size:12px;
         ">Add</button>
+      </div>
+      <div id="md-cache-section" style="display:none;margin-bottom:6px;background:#f0f8ff;padding:6px;border-radius:2px;">
+        <div style="font-weight:bold;margin-bottom:4px;">Cached Results:</div>
+        <div id="md-cache-list" style="font-size:11px;max-height:100px;overflow-y:auto;"></div>
       </div>
       <div id="md-output" style="
           max-height:250px;
@@ -225,6 +264,10 @@
     const keyInput = document.getElementById('md-api-key');
     const setBtn = document.getElementById('md-set-btn');
     const scanBtn = document.getElementById('md-scan-btn');
+    const cachedBtn = document.getElementById('md-cached-btn');
+    const clearCacheBtn = document.getElementById('md-clear-cache-btn');
+    const cacheSection = document.getElementById('md-cache-section');
+    const cacheList = document.getElementById('md-cache-list');
     const output = document.getElementById('md-output');
 
     // Load API key
@@ -232,6 +275,21 @@
         keySection.style.display = 'none';
         scanBtn.disabled = false;
     }
+
+    // Update cached button state
+    function updateCacheButtonState() {
+        cachedBtn.disabled = resultsCache.length === 0;
+        clearCacheBtn.disabled = resultsCache.length === 0;
+        if (resultsCache.length === 0) {
+            cachedBtn.style.background = '#ccc';
+            clearCacheBtn.style.background = '#ccc';
+        } else {
+            cachedBtn.style.background = '#4a4';
+            clearCacheBtn.style.background = '#d44';
+        }
+    }
+
+    updateCacheButtonState();
 
     // Whitelist
     let whitelist = [];
@@ -275,12 +333,59 @@
         }
     }
 
-    // Make removeFromBlacklist globally accessible for inline onclick
+    // Cache management UI
+    function updateCacheList() {
+        if (resultsCache.length === 0) {
+            cacheList.innerHTML = '<div style="color:#666;">No cached results</div>';
+            return;
+        }
+
+        cacheList.innerHTML = resultsCache.map((cache, idx) => {
+            const date = new Date(cache.timestamp).toLocaleString();
+            const location = `${cache.lat.toFixed(3)}, ${cache.lng.toFixed(3)}`;
+            return `<div style="margin-bottom:4px;padding:4px;background:#fff;border-radius:2px;">
+                <div style="font-weight:bold;">${date}</div>
+                <div>Location: ${location} (${cache.radius}m radius)</div>
+                <div>Results: ${cache.results.length} places</div>
+                <button onclick="loadCachedResult(${idx})" style="
+                    background:#28a;color:#fff;border:none;
+                    border-radius:2px;padding:2px 6px;cursor:pointer;
+                    font-size:10px;margin-top:2px;">Load</button>
+            </div>`;
+        }).join('');
+    }
+
+    // Make functions globally accessible for inline onclick
     window.removeFromBlacklist = function(type) {
         typeBlacklist = typeBlacklist.filter(t => t !== type);
         persistTypeBlacklist();
         updateBlacklistDisplay();
     };
+
+    window.loadCachedResult = function(idx) {
+        if (idx >= 0 && idx < resultsCache.length) {
+            const cache = resultsCache[idx];
+            displayResults(cache.results, true, new Date(cache.timestamp));
+            cacheSection.style.display = 'none';
+        }
+    };
+
+    // Cache management event listeners
+    cachedBtn.addEventListener('click', () => {
+        const isVisible = cacheSection.style.display !== 'none';
+        cacheSection.style.display = isVisible ? 'none' : 'block';
+        if (!isVisible) updateCacheList();
+    });
+
+    clearCacheBtn.addEventListener('click', () => {
+        if (confirm('Clear all cached results?')) {
+            resultsCache = [];
+            localStorage.removeItem(STORAGE_CACHE);
+            updateCacheButtonState();
+            updateCacheList();
+            cacheSection.style.display = 'none';
+        }
+    });
 
     manageBlacklistBtn.addEventListener('click', () => {
         const isVisible = blacklistSection.style.display !== 'none';
@@ -399,6 +504,122 @@
         }, []);
     }
 
+    function displayResults(missing, isFromCache = false, cacheDate = null) {
+        if (!missing.length) {
+            const message = isFromCache ?
+                `✅ All places had website, phone number & hours (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
+                '✅ All places have website, phone number & hours.';
+            output.textContent = message;
+            return;
+        }
+
+        // Filter out whitelisted places
+        missing = missing.filter(p => !whitelist.includes(p.id));
+
+        if (!missing.length) {
+            const message = isFromCache ?
+                `✅ All remaining places had website, phone number & hours (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
+                '✅ All places have website, phone number & hours.';
+            output.textContent = message;
+            return;
+        }
+
+        // Create header with cache info
+        output.innerHTML = '';
+
+        if (isFromCache && cacheDate) {
+            const cacheInfo = document.createElement('div');
+            cacheInfo.style.cssText = 'background:#e6f3ff;padding:4px;margin-bottom:6px;border-radius:2px;font-size:12px;color:#0066cc;';
+            cacheInfo.textContent = `📄 Cached results from ${cacheDate.toLocaleString()}`;
+            output.appendChild(cacheInfo);
+        }
+
+        // Render list
+        const ul = document.createElement('ul');
+        ul.style.listStyle = 'disc';
+        ul.style.margin = '0';
+        ul.style.padding = '0 0 0 1em';
+
+        missing.forEach(p => {
+            const li = document.createElement('li');
+            li.style.whiteSpace = 'nowrap';
+            li.style.marginBottom = '6px';
+
+            const a = document.createElement('a');
+            a.href = p.uri;
+            a.textContent = p.name;
+            a.target = '_blank';
+            a.style.fontWeight = 'bold';
+            li.appendChild(a);
+
+            // show type next to the link
+            if (p.primaryTypeDisplayName) {
+                li.appendChild(
+                    document.createTextNode(
+                        ` (${p.primaryTypeDisplayName})`
+                    )
+                );
+            }
+            // then show missing fields
+            li.appendChild(
+                document.createTextNode(
+                    ' – missing: ' + p.missing.join(', ')
+                )
+            );
+
+            const btn = document.createElement('button');
+            btn.textContent = 'Whitelist';
+            btn.style.background = '#28a';
+            btn.style.color = '#fff';
+            btn.style.border = 'none';
+            btn.style.borderRadius = '2px';
+            btn.style.padding = '2px 8px';
+            btn.style.cursor = 'pointer';
+            btn.style.marginLeft = '8px';
+            btn.addEventListener('click', () => {
+                if (!whitelist.includes(p.id)) {
+                    whitelist.push(p.id);
+                    persistWhitelist();
+                }
+                li.remove();
+                if (!ul.childElementCount) {
+                    const message = isFromCache ?
+                        `✅ All remaining places had website, phone number & hours (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
+                        '✅ All places have website, phone number & hours.';
+                    output.textContent = message;
+                }
+            });
+            li.appendChild(btn);
+
+            // Add blacklist button for the type (only for fresh results)
+            if (p.primaryType && !isFromCache) {
+                const blacklistBtn = document.createElement('button');
+                blacklistBtn.textContent = 'Blacklist Type';
+                blacklistBtn.style.background = '#d44';
+                blacklistBtn.style.color = '#fff';
+                blacklistBtn.style.border = 'none';
+                blacklistBtn.style.borderRadius = '2px';
+                blacklistBtn.style.padding = '2px 8px';
+                blacklistBtn.style.cursor = 'pointer';
+                blacklistBtn.style.marginLeft = '4px';
+                blacklistBtn.style.fontSize = '11px';
+                blacklistBtn.addEventListener('click', () => {
+                    const type = p.primaryType.toLowerCase();
+                    if (!typeBlacklist.includes(type)) {
+                        typeBlacklist.push(type);
+                        persistTypeBlacklist();
+                        alert(`Added "${type}" to blacklist. Please scan again to see updated results.`);
+                    }
+                });
+                li.appendChild(blacklistBtn);
+            }
+
+            ul.appendChild(li);
+        });
+
+        output.appendChild(ul);
+    }
+
     // Scan action
     scanBtn.addEventListener('click', async () => {
         output.textContent = '';
@@ -422,6 +643,22 @@
 
         const zoom = getZoomFromUrl();
         const radius = computeRadius(zoom);
+        const cacheKey = generateCacheKey(lat, lng, radius);
+
+        // Check if we have recent cached results for this location
+        const recentCache = resultsCache.find(cache => {
+            const cacheAge = Date.now() - cache.timestamp;
+            const maxAge = 30 * 60 * 1000; // 30 minutes
+            return cache.cacheKey === cacheKey && cacheAge < maxAge;
+        });
+
+        if (recentCache) {
+            const ageMinutes = Math.round((Date.now() - recentCache.timestamp) / (60 * 1000));
+            if (confirm(`Found cached results from ${ageMinutes} minutes ago. Use cached results instead of making a new API request?`)) {
+                displayResults(recentCache.results, true, new Date(recentCache.timestamp));
+                return;
+            }
+        }
 
         const body = {
             locationRestriction: {
@@ -474,97 +711,24 @@
         const arr = Array.isArray(data.places) ? data.places :
             Array.isArray(data.results) ? data.results : [];
 
-        let missing = findMissing(arr)
-            .filter(p => !whitelist.includes(p.id));
+        let missing = findMissing(arr);
 
-        if (!missing.length) {
-            output.textContent =
-                '✅ All places have website, Phone number & hours.';
-            return;
-        }
+        // Cache the results
+        const cacheEntry = {
+            timestamp: Date.now(),
+            lat: lat,
+            lng: lng,
+            radius: radius,
+            cacheKey: cacheKey,
+            results: missing
+        };
 
-        // Render list
-        const ul = document.createElement('ul');
-        ul.style.listStyle = 'disc';
-        ul.style.margin = '0';
-        ul.style.padding = '0 0 0 1em';
+        // Remove any existing cache for this location to avoid duplicates
+        resultsCache = resultsCache.filter(cache => cache.cacheKey !== cacheKey);
+        resultsCache.push(cacheEntry);
+        persistCache();
+        updateCacheButtonState();
 
-        missing.forEach(p => {
-            const li = document.createElement('li');
-            li.style.whiteSpace = 'nowrap';
-            li.style.marginBottom = '6px';
-
-            const a = document.createElement('a');
-            a.href = p.uri;
-            a.textContent = p.name;
-            a.target = '_blank';
-            a.style.fontWeight = 'bold';
-            li.appendChild(a);
-
-            // show type next to the link
-            if (p.primaryTypeDisplayName) {
-                li.appendChild(
-                    document.createTextNode(
-                        ` (${p.primaryTypeDisplayName})`
-                    )
-                );
-            }
-            // then show missing fields
-            li.appendChild(
-                document.createTextNode(
-                    ' – missing: ' + p.missing.join(', ')
-                )
-            );
-
-            const btn = document.createElement('button');
-            btn.textContent = 'Whitelist';
-            btn.style.background = '#28a';
-            btn.style.color = '#fff';
-            btn.style.border = 'none';
-            btn.style.borderRadius = '2px';
-            btn.style.padding = '2px 8px';
-            btn.style.cursor = 'pointer';
-            btn.style.marginLeft = '8px';
-            btn.addEventListener('click', () => {
-                if (!whitelist.includes(p.id)) {
-                    whitelist.push(p.id);
-                    persistWhitelist();
-                }
-                li.remove();
-                if (!ul.childElementCount) {
-                    output.textContent =
-                        '✅ All places have website, Phone number & hours.';
-                }
-            });
-            li.appendChild(btn);
-
-            // Add blacklist button for the type
-            if (p.primaryType) {
-                const blacklistBtn = document.createElement('button');
-                blacklistBtn.textContent = 'Blacklist Type';
-                blacklistBtn.style.background = '#d44';
-                blacklistBtn.style.color = '#fff';
-                blacklistBtn.style.border = 'none';
-                blacklistBtn.style.borderRadius = '2px';
-                blacklistBtn.style.padding = '2px 8px';
-                blacklistBtn.style.cursor = 'pointer';
-                blacklistBtn.style.marginLeft = '4px';
-                blacklistBtn.style.fontSize = '11px';
-                blacklistBtn.addEventListener('click', () => {
-                    const type = p.primaryType.toLowerCase();
-                    if (!typeBlacklist.includes(type)) {
-                        typeBlacklist.push(type);
-                        persistTypeBlacklist();
-                        alert(`Added "${type}" to blacklist. Please scan again to see updated results.`);
-                    }
-                });
-                li.appendChild(blacklistBtn);
-            }
-
-            ul.appendChild(li);
-        });
-
-        output.innerHTML = '';
-        output.appendChild(ul);
+        displayResults(missing, false);
     });
 })();
