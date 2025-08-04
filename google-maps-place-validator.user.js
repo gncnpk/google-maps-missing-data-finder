@@ -226,31 +226,31 @@
     });
     ro.observe(panel);
 
-function adjustPanelSize() {
-    const maxHeight = window.innerHeight - 100; // Leave some margin
-    const maxWidth = window.innerWidth - 100;
+    function adjustPanelSize() {
+        const maxHeight = window.innerHeight - 100; // Leave some margin
+        const maxWidth = window.innerWidth - 100;
 
-    const currentHeight = parseInt(panel.style.height) || 400;
-    const currentWidth = parseInt(panel.style.width) || 360;
+        const currentHeight = parseInt(panel.style.height) || 400;
+        const currentWidth = parseInt(panel.style.width) || 360;
 
-    if (currentHeight > maxHeight) {
-        panel.style.height = maxHeight + 'px';
-    }
-    if (currentWidth > maxWidth) {
-        panel.style.width = maxWidth + 'px';
+        if (currentHeight > maxHeight) {
+            panel.style.height = maxHeight + 'px';
+        }
+        if (currentWidth > maxWidth) {
+            panel.style.width = maxWidth + 'px';
+        }
+
+        // Ensure panel stays within viewport
+        const rect = panel.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            panel.style.left = (window.innerWidth - rect.width - 10) + 'px';
+        }
+        if (rect.bottom > window.innerHeight) {
+            panel.style.top = (window.innerHeight - rect.height - 10) + 'px';
+        }
     }
 
-    // Ensure panel stays within viewport
-    const rect = panel.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-        panel.style.left = (window.innerWidth - rect.width - 10) + 'px';
-    }
-    if (rect.bottom > window.innerHeight) {
-        panel.style.top = (window.innerHeight - rect.height - 10) + 'px';
-    }
-}
-
-window.addEventListener('resize', adjustPanelSize);
+    window.addEventListener('resize', adjustPanelSize);
 
     // Drag support via Pointer Events
     const header = document.getElementById('md-header');
@@ -341,9 +341,7 @@ window.addEventListener('resize', adjustPanelSize);
         localStorage.setItem(STORAGE_WHITE, JSON.stringify(whitelist));
     }
 
-    // Disabled to allow PoI with emojis to be discovered
-    // let typeBlacklist = ['bus_stop', 'public_restroom', 'doctor', 'consultant', 'transit_station', 'playground'];
-    let typeBlacklist = [];
+    let typeBlacklist = ['bus_stop', 'public_restroom', 'doctor', 'consultant', 'transit_station', 'playground'];
     try {
         const b = JSON.parse(localStorage.getItem(STORAGE_BLACKLIST) || '[]');
         if (Array.isArray(b) && b.length > 0) typeBlacklist = b;
@@ -594,9 +592,9 @@ window.addEventListener('resize', adjustPanelSize);
         missing.forEach(p => {
             const li = document.createElement('li');
             li.style.whiteSpace = 'nowrap';
-li.style.marginBottom = '9px';
-li.style.position = 'relative';
-li.style.paddingRight = '120px'; // Add space to prevent text from going under buttons
+            li.style.marginBottom = '9px';
+            li.style.position = 'relative';
+            li.style.paddingRight = '120px'; // Add space to prevent text from going under buttons
 
             const a = document.createElement('a');
             a.href = p.uri;
@@ -626,13 +624,13 @@ li.style.paddingRight = '120px'; // Add space to prevent text from going under b
                 )
             );
 
-// Create button container for proper alignment
-const buttonContainer = document.createElement('div');
-buttonContainer.style.cssText = 'position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; gap: 4px; align-items: center; background: rgba(255,255,255,0.9); border-radius: 2px; padding: 2px;';
+            // Create button container for proper alignment
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.cssText = 'position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; gap: 4px; align-items: center; background: rgba(255,255,255,0.9); border-radius: 2px; padding: 2px;';
 
-const btn = document.createElement('button');
-btn.textContent = 'Whitelist';
-btn.style.cssText = `
+            const btn = document.createElement('button');
+            btn.textContent = 'Whitelist';
+            btn.style.cssText = `
     background: #28a;
     color: #fff;
     border: none;
@@ -643,26 +641,26 @@ btn.style.cssText = `
     height: 22px;
     line-height: 1;
 `;
-btn.addEventListener('click', () => {
-    if (!whitelist.includes(p.id)) {
-        whitelist.push(p.id);
-        persistWhitelist();
-    }
-    li.remove();
-    if (!ul.childElementCount) {
-        const message = isFromCache ?
-            `✅ All remaining places had complete data and no emojis (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
-            '✅ All places have complete data and no emojis in names.';
-        output.textContent = message;
-    }
-});
-buttonContainer.appendChild(btn);
+            btn.addEventListener('click', () => {
+                if (!whitelist.includes(p.id)) {
+                    whitelist.push(p.id);
+                    persistWhitelist();
+                }
+                li.remove();
+                if (!ul.childElementCount) {
+                    const message = isFromCache ?
+                        `✅ All remaining places had complete data and no emojis (cached ${cacheDate ? cacheDate.toLocaleString() : ''})` :
+                        '✅ All places have complete data and no emojis in names.';
+                    output.textContent = message;
+                }
+            });
+            buttonContainer.appendChild(btn);
 
-// Add blacklist button for the type (only for fresh results)
-if (p.primaryType && !isFromCache) {
-    const blacklistBtn = document.createElement('button');
-    blacklistBtn.textContent = 'Blacklist Type';
-    blacklistBtn.style.cssText = `
+            // Add blacklist button for the type (only for fresh results)
+            if (p.primaryType && !isFromCache) {
+                const blacklistBtn = document.createElement('button');
+                blacklistBtn.textContent = 'Blacklist Type';
+                blacklistBtn.style.cssText = `
         background: #d44;
         color: #fff;
         border: none;
@@ -673,18 +671,18 @@ if (p.primaryType && !isFromCache) {
         height: 22px;
         line-height: 1;
     `;
-    blacklistBtn.addEventListener('click', () => {
-        const type = p.primaryType.toLowerCase();
-        if (!typeBlacklist.includes(type)) {
-            typeBlacklist.push(type);
-            persistTypeBlacklist();
-            alert(`Added "${type}" to blacklist. Please scan again to see updated results.`);
-        }
-    });
-    buttonContainer.appendChild(blacklistBtn);
-}
+                blacklistBtn.addEventListener('click', () => {
+                    const type = p.primaryType.toLowerCase();
+                    if (!typeBlacklist.includes(type)) {
+                        typeBlacklist.push(type);
+                        persistTypeBlacklist();
+                        alert(`Added "${type}" to blacklist. Please scan again to see updated results.`);
+                    }
+                });
+                buttonContainer.appendChild(blacklistBtn);
+            }
 
-li.appendChild(buttonContainer);
+            li.appendChild(buttonContainer);
 
             ul.appendChild(li);
         });
