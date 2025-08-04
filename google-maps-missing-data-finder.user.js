@@ -2,8 +2,8 @@
 // @name         Google Maps Missing Data Finder
 // @namespace    https://github.com/gncnpk/google-maps-missing-data-finder
 // @author       Gavin Canon-Phratsachack (https://github.com/gncnpk)
-// @version      0.0.2
-// @description  Scan Google Maps using the Nearby Search API for places missing data such as website, phone number, or hours.
+// @version      0.0.3
+// @description  Scan Google Maps using the Nearby Search API for places missing website, phone number, or hours.
 // @match        https://*.google.com/maps/*@*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @run-at       document-start
@@ -261,12 +261,17 @@
                 typeof p.currentOpeningHours !== 'object') miss.push(
                 FIELD_LABELS.currentOpeningHours
             );
-            if (miss.length) acc.push({
-                id: p.id,
-                name: getPlaceName(p),
-                uri: p.googleMapsUri,
-                missing: miss
-            });
+            if (miss.length) {
+                // capture primaryType if present
+                const typeName = p.primaryTypeDisplayName?.text || ''
+                acc.push({
+                    id: p.id,
+                    name: getPlaceName(p),
+                    uri: p.googleMapsUri,
+                    missing: miss,
+                    primaryTypeDisplayName: typeName
+                });
+            }
             return acc;
         }, []);
     }
@@ -322,7 +327,8 @@
                             'places.websiteUri,' +
                             'places.nationalPhoneNumber,' +
                             'places.currentOpeningHours,' +
-                            'places.googleMapsUri'
+                            'places.googleMapsUri,' +
+                            'places.primaryTypeDisplayName'
                     },
                     body: JSON.stringify(body)
                 }
@@ -335,8 +341,7 @@
         }
 
         const arr = Array.isArray(data.places) ? data.places :
-            Array.isArray(data.results) ? data.results :
-            [];
+            Array.isArray(data.results) ? data.results : [];
 
         let missing = findMissing(arr)
             .filter(p => !whitelist.includes(p.id));
@@ -365,8 +370,19 @@
             a.style.fontWeight = 'bold';
             li.appendChild(a);
 
+            // show type next to the link
+            if (p.primaryTypeDisplayName) {
+                li.appendChild(
+                    document.createTextNode(
+                        ` (${p.primaryTypeDisplayName})`
+                    )
+                );
+            }
+            // then show missing fields
             li.appendChild(
-                document.createTextNode(' – missing: ' + p.missing.join(', '))
+                document.createTextNode(
+                    ' – missing: ' + p.missing.join(', ')
+                )
             );
 
             const btn = document.createElement('button');
