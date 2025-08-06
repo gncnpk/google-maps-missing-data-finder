@@ -116,7 +116,7 @@
       <button id="md-close-btn" style="
           background:transparent;border:none;
           color:#fff;font-size:16px;line-height:1;
-          cursor:pointer;">×</button>
+          cursor:pointer;" title="Hide panel">×</button>
     </div>
     <div id="md-content" style="padding:8px;display:flex;flex-direction:column;height:calc(100% - 40px);">
       <div id="md-key-section" style="margin-bottom:6px;flex-shrink:0;">
@@ -260,6 +260,11 @@
     header.style.touchAction = 'none';
 
     header.addEventListener('pointerdown', e => {
+        // Don't start dragging if clicking on the close button
+        if (e.target.id === 'md-close-btn') {
+            return;
+        }
+
         dragging = true;
         const r = panel.getBoundingClientRect();
         offsetX = e.clientX - r.left;
@@ -294,9 +299,42 @@
         dragging = false;
     });
 
-    // Close button
-    document.getElementById('md-close-btn')
-        .addEventListener('click', () => panel.remove());
+    // Close/toggle button - wait for DOM to be ready
+    function setupToggleButton() {
+        const closeBtn = panel.querySelector('#md-close-btn');
+        const contentDiv = panel.querySelector('#md-content');
+
+        if (closeBtn && contentDiv) {
+            closeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                // Use getComputedStyle to check actual visibility
+                const isHidden = window.getComputedStyle(contentDiv).display === 'none';
+
+                if (isHidden) {
+                    // Show content
+                    contentDiv.style.display = 'flex';
+                    closeBtn.textContent = '×';
+                    closeBtn.title = 'Hide panel';
+                    // Restore panel height
+                    panel.style.height = '';
+                    panel.style.minHeight = '120px';
+                } else {
+                    // Hide content
+                    contentDiv.style.display = 'none';
+                    closeBtn.textContent = '↑';
+                    closeBtn.title = 'Show panel';
+                    // Set panel height to just the header
+                    panel.style.height = 'auto';
+                    panel.style.minHeight = '40px';
+                }
+            });
+        }
+    }
+
+    // Setup toggle button after a short delay to ensure DOM is ready
+    setTimeout(setupToggleButton, 100);
 
     // Controls
     const keySection = document.getElementById('md-key-section');
