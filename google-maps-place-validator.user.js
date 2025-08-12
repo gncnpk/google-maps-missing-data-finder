@@ -2,13 +2,15 @@
 // @name         Google Maps Place Validator
 // @namespace    https://github.com/gncnpk/google-maps-place-validator
 // @author       Gavin Canon-Phratsachack (https://github.com/gncnpk)
-// @version      0.0.8
+// @version      0.0.9
 // @description  Scan Google Maps using the Nearby Search API and validate places for missing/invalid data such as website, phone number, hours or emojis in names.
 // @match        https://*.google.com/maps/*@*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com/maps
 // @run-at       document-start
 // @license      MIT
 // @grant        none
+// @downloadURL https://update.greasyfork.org/scripts/544582/Google%20Maps%20Place%20Validator.user.js
+// @updateURL https://update.greasyfork.org/scripts/544582/Google%20Maps%20Place%20Validator.meta.js
 // ==/UserScript==
 
 ;
